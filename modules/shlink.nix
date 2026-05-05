@@ -34,6 +34,11 @@
 let
   cfg = config.services.shlink;
 
+  # PHP-FPM's INI parser treats the keywords false/no/off as empty string,
+  # causing "empty value" errors for env[] directives. "1"/"0" are plain
+  # strings that PHP-FPM accepts, and PHP's (bool) cast maps them correctly.
+  boolToEnv = b: if b then "1" else "0";
+
   # ── PHP interpreter with all extensions Shlink requires ──────────────
   phpWithExts = pkgs.php84.buildEnv {
     extensions = ({ enabled, all }: enabled ++ (with all; [
@@ -66,7 +71,7 @@ let
   # null values are stripped so Shlink falls back to its own defaults.
   shlinkEnv = lib.filterAttrs (_: v: v != null) {
     DEFAULT_DOMAIN              = cfg.defaultDomain;
-    IS_HTTPS_ENABLED            = lib.boolToString cfg.isHttps;
+    IS_HTTPS_ENABLED            = boolToEnv cfg.isHttps;
     BASE_PATH                   = if cfg.basePath != "" then cfg.basePath else null;
     TIMEZONE                    = cfg.timezone;
     MEMORY_LIMIT                = cfg.memoryLimit;
@@ -76,9 +81,9 @@ let
 
     # URL shortening
     DEFAULT_SHORT_CODES_LENGTH  = builtins.toString cfg.shortCodesLength;
-    AUTO_RESOLVE_TITLES         = lib.boolToString cfg.autoResolveTitles;
+    AUTO_RESOLVE_TITLES         = boolToEnv cfg.autoResolveTitles;
     SHORT_URL_MODE              = cfg.shortUrlMode;
-    MULTI_SEGMENT_SLUGS_ENABLED = lib.boolToString cfg.multiSegmentSlugs;
+    MULTI_SEGMENT_SLUGS_ENABLED = boolToEnv cfg.multiSegmentSlugs;
 
     # Database
     DB_DRIVER      = cfg.database.driver;
@@ -102,12 +107,12 @@ let
     DEFAULT_REGULAR_404_REDIRECT       = cfg.redirects.regular404;
 
     # Visit tracking
-    DISABLE_TRACKING          = lib.boolToString cfg.tracking.disable;
-    ANONYMIZE_REMOTE_ADDR     = lib.boolToString cfg.tracking.anonymizeRemoteAddr;
-    TRACK_ORPHAN_VISITS       = lib.boolToString cfg.tracking.orphanVisits;
-    DISABLE_IP_TRACKING       = lib.boolToString cfg.tracking.disableIp;
-    DISABLE_REFERRER_TRACKING = lib.boolToString cfg.tracking.disableReferrer;
-    DISABLE_UA_TRACKING       = lib.boolToString cfg.tracking.disableUA;
+    DISABLE_TRACKING          = boolToEnv cfg.tracking.disable;
+    ANONYMIZE_REMOTE_ADDR     = boolToEnv cfg.tracking.anonymizeRemoteAddr;
+    TRACK_ORPHAN_VISITS       = boolToEnv cfg.tracking.orphanVisits;
+    DISABLE_IP_TRACKING       = boolToEnv cfg.tracking.disableIp;
+    DISABLE_REFERRER_TRACKING = boolToEnv cfg.tracking.disableReferrer;
+    DISABLE_UA_TRACKING       = boolToEnv cfg.tracking.disableUA;
 
     # GeoLite2 — only included when geolocation is enabled
     GEOLITE_LICENSE_KEY = if cfg.geolite.enable then cfg.geolite.licenseKey else null;
