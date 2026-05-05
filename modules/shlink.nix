@@ -719,13 +719,13 @@ in {
     # ── nginx helper locations (computed read-only option) ─────────────
     services.shlink.nginxLocations = {
       "/" = {
-        root     = "${shlinkPkg}/public";
+        root     = "${shlinkPkg}/share/php/shlink/public";
         index    = "index.php";
         tryFiles = "$uri $uri/ /index.php$is_args$args";
       };
 
       "~ \\.php$" = {
-        root        = "${shlinkPkg}/public";
+        root        = "${shlinkPkg}/share/php/shlink/public";
         extraConfig = ''
           fastcgi_pass  unix:${config.services.phpfpm.pools.${poolName}.socket};
           fastcgi_index index.php;
