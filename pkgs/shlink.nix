@@ -60,6 +60,37 @@ in phpForBuild.buildComposerProject (finalAttrs: {
         --replace-fail "#!/usr/local/bin/php" "#!$phpBin" \
         --replace-fail "#!/usr/bin/php"       "#!$phpBin"
     done
+
+    # NixOS: redirect the application root chdir to a writable work directory.
+    # Without this, config/container.php would chdir to dirname(__DIR__) which
+    # is the read-only Nix store, making all relative data/* paths unwritable.
+    # The NixOS module sets SHLINK_WORK_DIR to the writable state directory and
+    # populates it with symlinks into the store at service start.
+    substituteInPlace "$out/share/php/shlink/config/container.php" \
+      --replace-fail \
+        'chdir(dirname(__DIR__));' \
+        'chdir(getenv("SHLINK_WORK_DIR") ?: dirname(__DIR__));'
+
+    # NixOS: override config entries that use __DIR__-based absolute paths.
+    # locks.global.php and geolite2.global.php hard-code paths relative to
+    # their own __FILE__ location, which resolves to the read-only store.
+    # This file is loaded last (zz- prefix sorts after all existing files)
+    # and its values override the store-relative ones via ConfigAggregator
+    # array merging.  SHLINK_DATA_DIR is set by the NixOS module.
+    cat > "$out/share/php/shlink/config/autoload/zz-nixos-paths.global.php" << 'EOF'
+<?php
+declare(strict_types=1);
+
+$dataDir = rtrim(getenv('SHLINK_DATA_DIR') ?: (getcwd() . '/data'), '/');
+
+return [
+    'locks'    => ['locks_dir'   => $dataDir . '/locks'],
+    'geolite2' => [
+        'db_location' => $dataDir . '/GeoLite2-City.mmdb',
+        'temp_dir'    => $dataDir . '/temp-geolite',
+    ],
+];
+EOF
   '';
 
   meta = with lib; {

@@ -122,8 +122,20 @@ let
       if cfg.geolite.enable then cfg.geolite.licenseKeyFile else null;
   };
 
+  # NixOS-specific runtime paths; never exposed as module options because
+  # they are implementation details of this packaging.
+  nixEnv = {
+    # container.php calls chdir() here so all relative data/* paths land in
+    # the writable state directory rather than the read-only Nix store.
+    SHLINK_WORK_DIR = "${stateDir}/work";
+    # Overrides the __DIR__-based lock/geolite paths in zz-nixos-paths.global.php.
+    SHLINK_DATA_DIR = "${stateDir}/data";
+    # Any non-empty value makes Shlink log to stderr instead of a file.
+    SHLINK_RUNTIME  = "nixos";
+  };
+
   # The full env passed to every Shlink process
-  fullEnv = shlinkEnv // secretEnv;
+  fullEnv = shlinkEnv // secretEnv // nixEnv;
 
   # Shared systemd service hardening applied to every Shlink unit
   hardenedServiceConfig = {
@@ -173,7 +185,7 @@ in {
 
     timezone = lib.mkOption {
       type    = lib.types.strMatching "[A-Za-z_]+(/[A-Za-z_]+)*";
-      default = config.time.timeZone;
+      default = if config.time.timeZone != null then config.time.timeZone else "UTC";
       example = "Europe/Berlin";
       description = "PHP timezone for all dates stored by Shlink. See https://www.php.net/timezones";
     };
@@ -601,21 +613,27 @@ in {
       };
 
       script = ''
-        # Build a writable working directory by symlinking everything from the
-        # store except `data/`, which we provide as a writable directory.
+        set -euo pipefail
         work="${stateDir}/work"
-        pkg="${shlinkPkg}/share/php/shlink"   # buildComposerProject install path
-        # Symlink all top-level store entries except data/ into the work dir
+        pkg="${shlinkPkg}/share/php/shlink"
+
+        # Populate the writable work dir with symlinks into the store.
+        # SHLINK_WORK_DIR (set in environment) points here so that
+        # container.php's chdir() lands in a writable tree.
+        # data/ is the only directory replaced by the real writable copy.
         for entry in "$pkg"/*/; do
           name=$(basename "$entry")
           [ "$name" = "data" ] && continue
           ln -sfn "$entry" "$work/$name"
         done
-        # Symlink our writable data dir
         ln -sfn "${stateDir}/data" "$work/data"
-        set -euo pipefail
+
+        # Drop the config cache so a stale serialised config from a previous
+        # run (or a previous package version) is never used.
+        rm -f "${stateDir}/data/cache/app_config.php"
+
         php="${phpWithExts}/bin/php"
-        cli="${shlinkPkg}/share/php/shlink/bin/cli"
+        cli="$pkg/bin/cli"
 
         echo "shlink-init: running db:create..."
         "$php" "$cli" db:create --no-interaction || true
@@ -634,7 +652,7 @@ in {
     # ── GeoLite2 update timer (only when geolocation is enabled) ──────
     systemd.services.shlink-geolite-update = lib.mkIf cfg.geolite.enable {
       description = "Shlink: download updated GeoLite2 database";
-      after       = [ "network-online.target" ];
+      after       = [ "network-online.target" "shlink-init.service" ];
       wants       = [ "network-online.target" ];
       environment = fullEnv;
 
@@ -663,6 +681,7 @@ in {
       description = "Shlink: resolve geolocation for pending visits";
       after       = [ "network-online.target" "shlink-init.service" ];
       wants       = [ "network-online.target" ];
+      requires    = [ "shlink-init.service" ];
       environment = fullEnv;
 
       serviceConfig = hardenedServiceConfig // {
