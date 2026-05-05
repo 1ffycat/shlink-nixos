@@ -84,9 +84,16 @@ let
     DB_DRIVER      = cfg.database.driver;
     DB_NAME        = cfg.database.name;
     DB_USER        = cfg.database.user;
-    DB_HOST        = if cfg.database.driver != "sqlite" then cfg.database.host else null;
+    # When createLocally=true, PostgreSQL uses peer auth (no password) via
+    # Unix socket. Setting host to the socket directory avoids TCP, which
+    # requires a password even for local connections.
+    DB_HOST        = if cfg.database.driver == "sqlite" then null
+                     else if cfg.database.createLocally then null
+                     else cfg.database.host;
     DB_PORT        = if cfg.database.port != null then builtins.toString cfg.database.port else null;
-    DB_UNIX_SOCKET = cfg.database.unixSocket;
+    DB_UNIX_SOCKET = if cfg.database.createLocally && cfg.database.unixSocket == null
+                     then "/run/postgresql"
+                     else cfg.database.unixSocket;
 
     # Redirects
     REDIRECT_STATUS_CODE               = builtins.toString cfg.redirects.statusCode;
