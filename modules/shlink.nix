@@ -745,5 +745,32 @@ in {
 
     # nginx needs to read the fpm socket, which is owned by cfg.group.
     users.users.${config.services.nginx.user}.extraGroups = [ cfg.group ];
+
+    # ── CLI wrapper ───────────────────────────────────────────────────────
+    # Provides `shlink-cli` that runs the Shlink CLI with the correct
+    # environment. Must be executed as the shlink user:
+    #   sudo -u shlink shlink-cli api-key:generate
+    environment.systemPackages = [
+      (pkgs.writeShellScriptBin "shlink-cli" ''
+        if [ "$(id -u)" != "$(id -u ${cfg.user})" ] && [ "$(id -u)" != "0" ]; then
+          echo "shlink-cli: run as ${cfg.user} or root" >&2
+          exit 1
+        fi
+
+        # Export static env vars baked in at build time.
+        ${lib.concatStrings (lib.mapAttrsToList (k: v: "export ${k}=${lib.escapeShellArg v}\n") (shlinkEnv // nixEnv))}
+
+        # Source any secret environment files at runtime so secrets never
+        # end up in the Nix store.
+        ${lib.concatMapStrings (f: ''
+          if [ -r ${lib.escapeShellArg f} ]; then
+            set -a; . ${lib.escapeShellArg f}; set +a
+          fi
+        '') cfg.environmentFiles}
+
+        exec ${phpWithExts}/bin/php \
+          ${shlinkPkg}/share/php/shlink/bin/cli "$@"
+      '')
+    ];
   };
 }
