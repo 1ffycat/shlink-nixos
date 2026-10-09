@@ -16,16 +16,16 @@ let
 
 in phpForBuild.buildComposerProject (finalAttrs: {
   pname   = "shlink";
-  version = "5.0.1";
+  version = "5.1.7";
 
   src = fetchFromGitHub {
     owner = "shlinkio";
     repo  = "shlink";
     rev   = "v${finalAttrs.version}";
     # Run:
-    #   nix-prefetch-url --unpack https://github.com/shlinkio/shlink/archive/refs/tags/v5.0.1.tar.gz
+    #   nix-prefetch-url --unpack https://github.com/shlinkio/shlink/archive/refs/tags/v5.1.7.tar.gz
     # and paste the sri hash here:
-    sha256 = "1lr0p5lx54i3ylc9zaaifha2kcm8d4mn5a3fqkg3gzcpw55z0w1b";
+    sha256 = "0l38bi0jawpzvjpfpyj8qynkzs3a6vz80vc5d24kf7kz32vbhwlg";
   };
 
   # Fixed-output hash of the vendor/ directory produced by
@@ -34,7 +34,7 @@ in phpForBuild.buildComposerProject (finalAttrs: {
   #   1. Set this to lib.fakeHash
   #   2. Run: nix build .#shlink 2>&1 | grep "got:"
   #   3. Paste the printed sri hash here.
-  vendorHash = "sha256-tPS0YaJwGMbsMIiTt7ol23fICvNVBX48yjjH61ZckQ8=";
+  vendorHash = "sha256-Fmny6UqvuiL0/FGI0IijWeDp79ScuwP3TzhqWBUNRgs=";
 
   composerLock = ./composer.lock;
 
